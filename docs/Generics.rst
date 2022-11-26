@@ -510,20 +510,23 @@ Protocols provide a natural way to express the constraints of a generic function
 in Swift. For example, one could define a generic linked list as::
 
   struct ListNode<T> {
-    var Value : T
-    enum NextNode { case Node : ListNode<T>, End }
-    var Next : NextNode
+    var value : T
+    indirect enum NextNode {
+      case Node(ListNode<T>)
+      case End
+    }
+    var next : NextNode
   }
 
-  struct List<T > {
-    var First : ListNode<T>::NextNode
+  struct List<T> {
+    var first : ListNode<T>.NextNode
   }
 
 This list works on any type T. One could then add a generic function that
 inserts at the beginning of the list::
 
   func insertAtBeginning<T>(_ list : List<T>, value : T) {
-    list.First = ListNode<T>(value, list.First)
+    list.first = ListNode<T>(value, list.first)
   }
 
 Expressing Constraints
@@ -538,11 +541,12 @@ implement a find() operation on lists::
 
   func find<T : Comparable>(_ list : List<T>, value : T) -> Int {
     var index = 0
-    var current
-    for (current = list.First; current is Node; current = current.Next) {
-      if current.Value.isEqual(value) { // okay: T is Comparable
+    var current = list.first
+    while case let .Node(node) = current {
+      if node.value == value {
         return index
       }
+      current = node.next
       index = index + 1
     }
     return -1
@@ -559,10 +563,11 @@ ordered collection::
     func getAt(_ index : Int) -> Element // Element is an associated type
   }
 
-  func find<C : OrderedCollection where C.Element : Comparable>(
-         _ collection : C, value : C.Element) -> Int
+  func find<C: OrderedCollection>(
+  _ collection : C, value : C.Element) -> Int
+  where C.Element : Comparable
   {
-    for index in 0...collection.size() {
+    for index in 0..<collection.size() {
       if (collection.getAt(index) == value) { // okay: we know that C.Element is Comparable
         return index
       }
@@ -572,11 +577,7 @@ ordered collection::
 
 The where clause is actually the more general way of expressing constraints,
 and the constraints expressed in the angle brackets (e.g., <C :
-OrderedCollection>) are just sugar for a where clause.  For example, the
-above find() signature is equivalent to::
-
-  func find<C where C : OrderedCollection, C.Element : Comparable>(
-         _ collection : C, value : C.Element) -> Int
+OrderedCollection>) are just sugar for a where clause.
 
 Note that find<C> is shorthand for (and equivalent to) find<C : Any>, since
 every type conforms to the Any protocol composition.
@@ -586,7 +587,7 @@ expressible. Before we get to those, consider a simple "Enumerator" protocol tha
 lets us describe an iteration of values of some given value type::
 
   protocol Enumerator {
-    typealias Element
+    associatedtype Element
     func isEmpty() -> Bool
     func next() -> Element
   }
@@ -595,7 +596,7 @@ Now, we want to express the notion of an enumerable collection, which provides
 iteration, which we do by adding requirements into the protocol::
 
   protocol EnumerableCollection : Collection {
-    typealias EnumeratorType : Enumerator
+    associatedtype EnumeratorType : Enumerator
     where EnumeratorType.Element == Element
     func getEnumeratorType() -> EnumeratorType
   }
@@ -679,12 +680,12 @@ implemented for lists, above::
 
   func find<T : Comparable>(_ list : List<T>, value : T) -> Int {
     var index = 0
-    var current = list.First
-    while current is ListNode<T> { // now I'm just making stuff up
-      if current.value.isEqual(value) { // okay: T is Comparable
+    var current = list.first
+    while case let .Node(node) = current { // now I'm just making stuff up
+      if node.value == value { // okay: T is Comparable
         return index
       }
-      current = current.Next
+      current = node.next
       index = index + 1
     }
     return -1
@@ -801,30 +802,27 @@ Overloading
 Generic functions can be overloaded based entirely on constraints. For example,
 consider a binary search algorithm::
 
-   func binarySearch<
-      C : EnumerableCollection where C.Element : Comparable
-   >(_ collection : C, value : C.Element)
-     -> C.EnumeratorType
-   {
-     // We can perform log(N) comparisons, but EnumerableCollection
-     // only supports linear walks, so this is linear time
-   }
+  func binarySearch<C : EnumerableCollection>
+    (_ collection : C, value : C.Element) -> C.EnumeratorType
+    where C.Element : Comparable
+  {
+    // We can perform log(N) comparisons, but EnumerableCollection
+    // only supports linear walks, so this is linear time
+  }
 
-   protocol RandomAccessEnumerator : Enumerator {
-     // splits a range in half, returning both halves
-     func split() -> (Enumerator, Enumerator)
-   }
+  protocol RandomAccessEnumerator : Enumerator {
+    // splits a range in half, returning both halves
+    func split() -> (any Enumerator, any Enumerator)
+  }
 
-   func binarySearch<
-      C : EnumerableCollection
-       where C.Element : Comparable,
-                 C.EnumeratorType: RandomAccessEnumerator
-   >(_ collection : C, value : C.Element)
-     -> C.EnumeratorType
-   {
-     // We can perform log(N) comparisons and log(N) range splits,
-     // so this is logarithmic time
-   }
+  func binarySearch<C : EnumerableCollection>
+    (_ collection : C, value : C.Element) -> C.EnumeratorType
+    where C.Element : Comparable,
+          C.EnumeratorType : RandomAccessEnumerator
+  {
+    // We can perform log(N) comparisons and log(N) range splits,
+    // so this is logarithmic time
+  }
 
 If binarySearch is called with a sequence whose range type conforms to
 RandomAccessEnumerator, both of the generic functions match. However, the second
@@ -836,13 +834,11 @@ There is a question as to when this overloading occurs. For example,
 binarySearch might be called as a subroutine of another generic function with
 minimal requirements::
 
-  func doSomethingWithSearch<
-    C : EnumerableCollection where C.Element : Ordered
-  >(
-    _ collection : C, value : C.Element
-  ) -> C.EnumeratorType
+  func doSomethingWithSearch<C : EnumerableCollection>
+    (_ collection : C, value : C.Element) -> C.EnumeratorType
+    where C.Element : Ordered & Comparable
   {
-    binarySearch(collection, value)
+    binarySearch(collection, value: value)
   }
 
 At the time when the generic definition of doSomethingWithSearch is
