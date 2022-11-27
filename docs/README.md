@@ -287,7 +287,7 @@ They are preserved mostly for historical interest.
 - [AccessControl.md](/docs/AccessControl.md)
 - [Arrays.rst](/docs/Arrays.rst)
   <!-- Has additional notes on bridging that may be of general interest? -->
-- [Generics.rst](/docs/Generics.rst)
+- [Generics.rst](/docs/archive/Generics.rst)
 - [ErrorHandling.rst](/docs/ErrorHandling.rst)
 - [StringDesign.rst](/docs/StringDesign.rst)
 - [TextFormatting.rst](/docs/TextFormatting.rst)
